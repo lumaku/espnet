@@ -16,7 +16,7 @@ class Conv2dSubsampling(torch.nn.Module):
 
     :param int idim: input dim
     :param int odim: output dim
-    :param flaot dropout_rate: dropout rate
+    :param float dropout_rate: dropout rate
 
     """
 

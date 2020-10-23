@@ -70,7 +70,7 @@ class E2E(ASRInterface, torch.nn.Module):
             "--transformer-input-layer",
             type=str,
             default="conv2d",
-            choices=["conv2d", "linear", "embed"],
+            choices=["conv2d", "linear", "embed", "sinc"],
             help="transformer input layer type",
         )
         group.add_argument(
@@ -312,7 +312,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # 1. forward encoder
         xs_pad = xs_pad[:, : max(ilens)]  # for data parallel
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
-        hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
+        hs_pad, hs_mask = self.encoder(xs_pad, src_mask, ilens=ilens)
         self.hs_pad = hs_pad
 
         # 2. forward decoder

@@ -10,6 +10,7 @@ from torch.nn.utils.rnn import pad_packed_sequence
 from espnet.nets.e2e_asr_common import get_vgg2l_odim
 from espnet.nets.pytorch_backend.nets_utils import make_pad_mask
 from espnet.nets.pytorch_backend.nets_utils import to_device
+from espnet.nets.pytorch_backend.sincconv import LightweightSincConvs
 
 
 class RNNP(torch.nn.Module):
@@ -171,6 +172,8 @@ def reset_backward_rnn_state(states):
     return states
 
 
+
+
 class VGG2L(torch.nn.Module):
     """VGG-like module
 
@@ -250,53 +253,53 @@ class Encoder(torch.nn.Module):
         self, etype, idim, elayers, eunits, eprojs, subsample, dropout, in_channel=1
     ):
         super(Encoder, self).__init__()
-        typ = etype.lstrip("vgg").rstrip("p")
-        if typ not in ["lstm", "gru", "blstm", "bgru"]:
+        etype = etype.strip()
+        use_sinc,use_vgg,use_proj = False,False,False
+        if etype.startswith("sinc"):
+            etype = etype[4:]
+            use_sinc = True
+        if etype.startswith("vgg"):
+            etype = etype[3:]
+            use_vgg = True
+        if etype[-1] == "p":
+            etype = etype[:-1]
+            use_proj = True
+
+        if etype not in ['lstm', 'gru', 'blstm', 'bgru']:
             logging.error("Error: need to specify an appropriate encoder architecture")
 
-        if etype.startswith("vgg"):
-            if etype[-1] == "p":
-                self.enc = torch.nn.ModuleList(
-                    [
-                        VGG2L(in_channel),
-                        RNNP(
-                            get_vgg2l_odim(idim, in_channel=in_channel),
-                            elayers,
-                            eunits,
-                            eprojs,
-                            subsample,
-                            dropout,
-                            typ=typ,
-                        ),
-                    ]
-                )
-                logging.info("Use CNN-VGG + " + typ.upper() + "P for encoder")
-            else:
-                self.enc = torch.nn.ModuleList(
-                    [
-                        VGG2L(in_channel),
-                        RNN(
-                            get_vgg2l_odim(idim, in_channel=in_channel),
-                            elayers,
-                            eunits,
-                            eprojs,
-                            dropout,
-                            typ=typ,
-                        ),
-                    ]
-                )
-                logging.info("Use CNN-VGG + " + typ.upper() + " for encoder")
+        modules = []
+        logstrs = []
+
+        if use_sinc:
+            # TODO pass configuration parameters
+            modules.append(LightweightSincConvs(in_channels=1))
+            logstrs.append('Sinc')
+            idim = modules[-1].get_odim(idim)
+            in_channel = 1
+            self.sinc_convs = modules[-1]
         else:
-            if etype[-1] == "p":
-                self.enc = torch.nn.ModuleList(
-                    [RNNP(idim, elayers, eunits, eprojs, subsample, dropout, typ=typ)]
-                )
-                logging.info(typ.upper() + " with every-layer projection for encoder")
-            else:
-                self.enc = torch.nn.ModuleList(
-                    [RNN(idim, elayers, eunits, eprojs, dropout, typ=typ)]
-                )
-                logging.info(typ.upper() + " without projection for encoder")
+            self.sinc_convs = None
+
+        if use_vgg:
+            modules.append(VGG2L(in_channel))
+            logstrs.append('CNN-VGG')
+            #idim = modules[-1].get_odim(idim)
+            idim = get_vgg2l_odim(idim, in_channel=in_channel)
+
+        if use_proj:
+            modules.append(RNNP(idim, elayers, eunits, eprojs, subsample, dropout, typ=etype))
+            logstrs.append(etype.upper()+'P')
+        else:
+            modules.append(RNN(idim, elayers, eunits, eprojs, dropout, typ=etype))
+            logstrs.append(etype.upper()+'P')
+
+        self.enc = torch.nn.ModuleList(modules)
+        logging.info('Use ' + ' + '.join(logstrs) + ' for encoder')
+
+    def init_sinc_convs(self):
+        if self.sinc_convs is not None:
+            self.sinc_convs.init_sinc_convs()
 
     def forward(self, xs_pad, ilens, prev_states=None):
         """Encoder forward
@@ -344,7 +347,7 @@ def encoder_for(args, idim, subsample):
             args.eunits,
             args.eprojs,
             subsample,
-            args.dropout_rate,
+            args.dropout_rate
         )
     elif num_encs >= 1:
         enc_list = torch.nn.ModuleList()
@@ -356,7 +359,7 @@ def encoder_for(args, idim, subsample):
                 args.eunits[idx],
                 args.eprojs,
                 subsample[idx],
-                args.dropout_rate[idx],
+                args.dropout_rate[idx]
             )
             enc_list.append(enc)
         return enc_list

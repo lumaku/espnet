@@ -35,6 +35,7 @@ egs*/*/*/dump
 egs*/*/*/enhan
 egs*/*/*/exp
 egs*/*/*/fbank
+egs*/*/*/raw
 egs*/*/*/mfcc
 egs*/*/*/stft
 egs*/*/*/tensorboard

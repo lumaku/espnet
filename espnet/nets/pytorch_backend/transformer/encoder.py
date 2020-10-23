@@ -26,6 +26,7 @@ from espnet.nets.pytorch_backend.transformer.positionwise_feed_forward import (
 )
 from espnet.nets.pytorch_backend.transformer.repeat import repeat
 from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling
+from espnet.nets.pytorch_backend.transformer.sincconv import SincConvs
 
 
 def _pre_hook(
@@ -104,6 +105,8 @@ class Encoder(torch.nn.Module):
             self.embed = Conv2dSubsampling(idim, attention_dim, dropout_rate)
         elif input_layer == "vgg2l":
             self.embed = VGG2L(idim, attention_dim)
+        elif input_layer == "sinc":
+            self.embed = SincConvs(idim, attention_dim, dropout_rate, pos_enc_class, positional_dropout_rate)
         elif input_layer == "embed":
             self.embed = torch.nn.Sequential(
                 torch.nn.Embedding(idim, attention_dim, padding_idx=padding_idx),
@@ -262,16 +265,19 @@ class Encoder(torch.nn.Module):
             raise NotImplementedError("Support only linear or conv1d.")
         return positionwise_layer, positionwise_layer_args
 
-    def forward(self, xs, masks):
-        """Encode input sequence.
+    def forward(self, xs, masks, ilens=None):
+        """Embed positions in tensor.
 
         :param torch.Tensor xs: input tensor
         :param torch.Tensor masks: input mask
+        :param torch.Tensor ilens: input ilens (only used for SincConvs)
         :return: position embedded tensor and mask
         :rtype Tuple[torch.Tensor, torch.Tensor]:
         """
         if isinstance(self.embed, (Conv2dSubsampling, VGG2L)):
             xs, masks = self.embed(xs, masks)
+        elif isinstance(self.embed, SincConvs):
+            xs, masks = self.embed(xs, ilens)
         else:
             xs = self.embed(xs)
         xs, masks = self.encoders(xs, masks)

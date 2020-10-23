@@ -78,29 +78,17 @@ class E2E(ASRInterface, torch.nn.Module):
         """Add arguments for the encoder."""
         group = parser.add_argument_group("E2E encoder setting")
         # encoder
+        etype_choices = ['lstm', 'gru',]
+        etype_choices.extend(['b'+choice for choice in etype_choices])
+        etype_choices.extend([choice+'p' for choice in etype_choices])
+        etype_choices.extend(['vgg'+choice for choice in etype_choices])
+        etype_choices.extend(['sinc'+choice for choice in etype_choices])
         group.add_argument(
-            "--etype",
-            default="blstmp",
+            "--etype", 
+            default="blstmp", 
             type=str,
-            choices=[
-                "lstm",
-                "blstm",
-                "lstmp",
-                "blstmp",
-                "vgglstmp",
-                "vggblstmp",
-                "vgglstm",
-                "vggblstm",
-                "gru",
-                "bgru",
-                "grup",
-                "bgrup",
-                "vgggrup",
-                "vggbgrup",
-                "vgggru",
-                "vggbgru",
-            ],
-            help="Type of encoder network architecture",
+            choices=etype_choices,
+            help="Type of encoder network architecture"
         )
         group.add_argument(
             "--elayers",
@@ -329,6 +317,7 @@ class E2E(ASRInterface, torch.nn.Module):
         - LSTM.upward.b[forget_gate_range] = 1 (but not used in NStepLSTM)
         """
         lecun_normal_init_parameters(self)
+        self.enc.init_sinc_convs()
         # exceptions
         # embed weight ~ Normal(0, 1)
         self.dec.embed.weight.data.normal_(0, 1)
